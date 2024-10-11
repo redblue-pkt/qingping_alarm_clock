@@ -96,7 +96,7 @@ def async_register_services(hass: HomeAssistant) -> None:
                 continue
 
             dt = call.data["time"]
-            timezone_offset = 0
+            timezone_offset = None
             if dt.tzinfo is not None:
                 timezone_offset = int(dt.utcoffset().total_seconds() / 60)
             timestamp = int(dt.timestamp())

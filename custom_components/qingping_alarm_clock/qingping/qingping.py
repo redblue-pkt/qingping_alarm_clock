@@ -134,18 +134,22 @@ class Qingping:
     async def set_time(self, timestamp: int, timezone_offset: int | None = None):
         start_time = time.time()
 
+        if timezone_offset is None:
+            is_dst = time.daylight and time.localtime().tm_isdst > 0
+            utc_offset = - (time.altzone if is_dst else time.timezone)
+            timezone_offset = int(utc_offset / 60)
+
         await self._ensure_connected()
         await self._ensure_configuration()
 
         # Account for time passed while connecting
         timestamp = int(timestamp + (time.time() - start_time))
 
+        _LOGGER.debug(f"Set time to {timestamp}, tz offset: {timezone_offset}")
         timestamp_bytes = self._get_timestamp_bytes(timestamp)
         await self._write_gatt_char(MAIN_CHAR, timestamp_bytes)
 
-        if timezone_offset is not None and \
-            self.configuration.timezone_offset != timezone_offset:
-
+        if self.configuration.timezone_offset != timezone_offset:
             self.configuration.timezone_offset = timezone_offset
             await self.set_configuration(self.configuration)
 
