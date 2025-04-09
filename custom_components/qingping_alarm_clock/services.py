@@ -3,18 +3,19 @@ import re
 import voluptuous as vol
 from datetime import datetime
 
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
 from homeassistant.const import ATTR_DEVICE_ID
 
 from .qingping.util import alarm_days_from_string
-from .qingping import Qingping
+from .qingping import Qingping, Alarm
 from .const import (
     DOMAIN,
     SERVICE_SET_ALARM,
     SERVICE_DELETE_ALARM,
+    SERVICE_GET_ALARMS,
     SERVICE_SET_TIME,
     SERVICE_REFRESH,
     CONF_TIME,
@@ -23,6 +24,8 @@ from .const import (
     CONF_ALARM_SLOT,
     CONF_ALARM_TIME,
     CONF_ALARM_DAYS,
+    CONF_ALARM_SNOOZE,
+    ATTR_ONLY_ENABLED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,11 +38,17 @@ SET_ALARM_SCHEMA = vol.Schema({
     vol.Optional(CONF_ALARM_TIME): cv.time,
     vol.Optional(CONF_ALARM_DAYS): vol.All(cv.string, vol.Match(DAYS_REGEX)),
     vol.Optional(CONF_ALARM_ENABLED): cv.boolean,
+    vol.Optional(CONF_ALARM_SNOOZE): cv.boolean,
 })
 
 DELETE_ALARM_SCHEMA = vol.Schema({
     vol.Required(ATTR_DEVICE_ID): str,
     vol.Required(CONF_ALARM_SLOT): vol.All(vol.Coerce(int), vol.Range(min=0, max=ALARM_SLOTS_COUNT)),
+})
+
+GET_ALARMS_SCHEMA = vol.Schema({
+    vol.Required(ATTR_DEVICE_ID): str,
+    vol.Optional(ATTR_ONLY_ENABLED, default=False): cv.boolean
 })
 
 SET_TIME_SCHEMA = vol.Schema({
@@ -66,13 +75,43 @@ def async_register_services(hass: HomeAssistant) -> None:
             is_enabled = call.data.get(CONF_ALARM_ENABLED)
             time = call.data.get(CONF_ALARM_TIME)
             days = alarm_days_from_string(call.data.get(CONF_ALARM_DAYS))
+            snooze = call.data.get(CONF_ALARM_SNOOZE)
 
             await instance.set_alarm(
                 slot,
                 is_enabled,
                 time,
-                days
+                days,
+                snooze
             )
+
+    async def async_get_alarms(call: ServiceCall) -> ServiceResponse:
+        """Get the list of alarms."""
+        mac = _get_device_mac(hass, call)
+        only_enabled = call.data[ATTR_ONLY_ENABLED] | False
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            instance: Qingping = entry.runtime_data
+            if instance.mac != mac:
+                continue
+
+            responseAlarms = []
+            for alarm in instance.alarms:
+                if not alarm.is_configured:
+                    continue
+                if only_enabled and not alarm.is_enabled:
+                    continue
+
+                alarm_dict = {
+                    CONF_ALARM_SLOT: alarm.slot,
+                    CONF_ALARM_ENABLED: alarm.is_enabled,
+                    CONF_ALARM_TIME: alarm.time,
+                    CONF_ALARM_DAYS: alarm.days_string,
+                    CONF_ALARM_SNOOZE: alarm.snooze
+                }
+                responseAlarms.append(alarm_dict)
+
+            responseAlarms.sort(key=lambda a: a[CONF_ALARM_SLOT]) # order by slot number
+            return {"alarms": responseAlarms}
 
     async def async_delete_alarm(call: ServiceCall) -> None:
         """Delete alarm at the specified slot."""
@@ -133,6 +172,14 @@ def async_register_services(hass: HomeAssistant) -> None:
         SERVICE_SET_ALARM,
         async_set_alarm,
         schema=SET_ALARM_SCHEMA
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_ALARMS,
+        async_get_alarms,
+        schema=GET_ALARMS_SCHEMA,
+        supports_response=SupportsResponse.ONLY
     )
 
     hass.services.async_register(

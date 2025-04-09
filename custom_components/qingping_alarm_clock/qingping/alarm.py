@@ -20,6 +20,7 @@ class Alarm:
     hour: int | None = None
     minute: int | None = None
     days: set[AlarmDay] | None = None
+    snooze: bool | None = None
 
     def __init__(self, slot: int, alarm_bytes: bytes):
         self.slot = slot
@@ -31,15 +32,17 @@ class Alarm:
         self.hour = alarm_bytes[1]
         self.minute = alarm_bytes[2]
         self.days = self._bitmask_to_days(alarm_bytes[3])
+        self.snooze = alarm_bytes[4] == 1
 
-        _LOGGER.debug(f"Alarm #{self.slot} enabled: {self.is_enabled}, hour: {self.hour}, minute: {self.minute}, days: {self.days}")
+        _LOGGER.debug(f"Alarm #{self.slot} enabled: {self.is_enabled}, hour: {self.hour}, minute: {self.minute}, days: {self.days}, snooze: {self.snooze}")
 
     @property
     def is_configured(self):
         return self.is_enabled is not None and \
             self.hour is not None and \
             self.minute is not None and \
-            self.days is not None
+            self.days is not None and \
+            self.snooze is not None
 
     @property
     def time(self):
@@ -74,7 +77,7 @@ class Alarm:
             byte_array.append(self.hour)
             byte_array.append(self.minute)
             byte_array.append(self._days_to_bitmask(self.days))
-            byte_array.append(0x00)
+            byte_array.append(0x01 if self.snooze else 0x00)
         else:
             byte_array.extend([0xff, 0xff, 0xff, 0xff, 0xff])
 
@@ -85,6 +88,7 @@ class Alarm:
         self.hour = None
         self.minute = None
         self.days = None
+        self.snooze = None
 
     def _bitmask_to_days(self, bitmask: int):
         bit_to_day = {

@@ -33,6 +33,26 @@ set_alarm:
       required: false
       selector:
         boolean:
+    snooze:
+      description: "Whether the alarm has snooze enabled."
+      example: true
+      required: false
+      selector:
+        boolean:
+get_alarms:
+  description: "Get the list of alarms."
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: qingping_alarm_clock
+    only_enabled:
+      description: "Whether to only get enabled alarms."
+      example: true
+      required: false
+      selector:
+        boolean:
 delete_alarm:
   description: "Delete an alarm."
   fields:

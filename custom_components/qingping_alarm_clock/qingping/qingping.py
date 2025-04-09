@@ -161,7 +161,8 @@ class Qingping:
         slot: int,
         is_enabled: bool | None,
         time: dtime | None,
-        days: set[AlarmDay] | None
+        days: set[AlarmDay] | None,
+        snooze: bool | None
     ) -> bool:
         await self._ensure_alarms()
         await self._ensure_connected()
@@ -174,7 +175,8 @@ class Qingping:
                 alarm.time = time
             if days is not None:
                 alarm.days = days
-
+            if snooze is not None:
+                alarm.snooze = snooze
             if not alarm.is_configured:
                 raise ServiceValidationError("Alarm not configured.")
 
